@@ -132,11 +132,18 @@
 
             if (isCorrect) {
                 try {
-                    // 如果是从内联按钮进来的，这里会报错并跳入 catch
-                    tg.sendData("success");
+                    // 【防爆破升级】：抓取链接中的 token 回传，不再使用固定字符串
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const dynamicToken = urlParams.get('token');
+                    
+                    if (dynamicToken) {
+                        tg.sendData(dynamicToken);
+                    } else {
+                        // 兼容处理
+                        tg.sendData("success"); 
+                    }
                     tg.close();
                 } catch(error) {
-                    // 弹窗提示，避免“没有任何反应”
                     tg.showAlert("⚠️ 提交失败！\n原因：您点击了过期的验证按钮。\n\n请关闭此窗口，点击屏幕【最下方】打字框上面的大按钮重新进入验证！");
                 }
             } else {
