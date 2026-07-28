@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>安全验证</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color, #f4f4f5);
+            color: var(--tg-theme-text-color, #000000);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;
+        }
+        .captcha-box {
+            background: var(--tg-theme-secondary-bg-color, #ffffff);
+            padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+            text-align: center; width: 100%; max-width: 320px;
+        }
+        .header-title {
+            background-color: #3390ec; color: white; padding: 15px; border-radius: 8px 8px 0 0;
+            margin: -20px -20px 20px -20px; text-align: left;
+        }
+        .header-title h3 { margin: 0; font-weight: normal; font-size: 16px; }
+        .header-title h2 { margin: 5px 0 0 0; font-size: 24px; }
+        .grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;
+        }
+        .item {
+            aspect-ratio: 1 / 1; font-size: 40px; background: #f0f0f0; 
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; user-select: none; position: relative;
+            box-sizing: border-box; border: 3px solid transparent; transition: all 0.2s;
+        }
+        /* 选中时的状态：缩小并加上蓝色边框和对号 */
+        .item.selected {
+            border-color: #3390ec; transform: scale(0.9);
+        }
+        .item.selected::after {
+            content: '✅'; position: absolute; top: -5px; right: -5px; font-size: 16px;
+            background: white; border-radius: 50%;
+        }
+        .verify-btn {
+            background-color: #3390ec; color: white; border: none; padding: 12px 24px;
+            font-size: 16px; border-radius: 6px; margin-top: 20px; width: 100%;
+            cursor: pointer; font-weight: bold;
+        }
+        .verify-btn:active { background-color: #2b7bc6; }
+    </style>
+</head>
+<body>
+    <div class="captcha-box">
+        <div class="header-title">
+            <h3>请选择所有包含以下物品的图片：</h3>
+            <h2 id="target-name"></h2>
+        </div>
+        <div class="grid" id="grid"></div>
+        <button class="verify-btn" onclick="verifyCaptcha()">验证</button>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand(); 
+
+        // 验证物品库
+        const categories = {
+            "自行车": ['🚲', '🚵', '🚴'],
+            "红绿灯": ['🚦'],
+            "汽车": ['🚗', '🚕', '🚓'],
+            "公交车": ['🚌', '🚐']
+        };
+
+        const keys = Object.keys(categories);
+        // 随机选一个作为目标，例如“红绿灯”
+        const targetCategory = keys[Math.floor(Math.random() * keys.length)];
+        const targetIcons = categories[targetCategory];
+        
+        document.getElementById('target-name').innerText = targetCategory;
+
+        // 生成 9 个格子的内容
+        let gridItems = [];
+        // 1. 确保至少有 2 到 4 个正确答案
+        const targetCount = Math.floor(Math.random() * 3) + 2; 
+        for(let i=0; i<targetCount; i++) {
+            gridItems.push({ icon: targetIcons[Math.floor(Math.random() * targetIcons.length)], isTarget: true });
+        }
+
+        // 2. 剩下的格子填入干扰项（其他分类的图标）
+        const distractors = keys.filter(k => k !== targetCategory).flatMap(k => categories[k]);
+        while(gridItems.length < 9) {
+            gridItems.push({ icon: distractors[Math.floor(Math.random() * distractors.length)], isTarget: false });
+        }
+
+        // 3. 打乱九宫格顺序
+        gridItems.sort(() => Math.random() - 0.5);
+
+        // 渲染九宫格
+        const grid = document.getElementById('grid');
+        let selectedIndexes = new Set();
+
+        gridItems.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = 'item';
+            div.innerText = item.icon;
+            div.onclick = () => {
+                if (selectedIndexes.has(index)) {
+                    selectedIndexes.delete(index);
+                    div.classList.remove('selected');
+                } else {
+                    selectedIndexes.add(index);
+                    div.classList.add('selected');
+                }
+            };
+            grid.appendChild(div);
+        });
+
+        // 点击验证按钮的逻辑
+        function verifyCaptcha() {
+            let isCorrect = true;
+            let targetIndexes = [];
+            
+            // 找出所有正确答案的索引
+            gridItems.forEach((item, index) => {
+                if (item.isTarget) targetIndexes.push(index);
+            });
+
+            // 检查数量是否匹配
+            if (selectedIndexes.size !== targetIndexes.length) {
+                isCorrect = false;
+            } else {
+                // 检查选中的是不是全是正确的
+                for (let index of selectedIndexes) {
+                    if (!gridItems[index].isTarget) {
+                        isCorrect = false;
+                        break;
+                    }
+                }
+            }
+
+            if (isCorrect) {
+                tg.sendData("success");
+                tg.close();
+            } else {
+                tg.showAlert("验证失败，请重新选择！");
+                // 清空选中状态
+                selectedIndexes.clear();
+                document.querySelectorAll('.item').forEach(el => el.classList.remove('selected'));
+            }
+        }
+    </script>
+</body>
+</html>
