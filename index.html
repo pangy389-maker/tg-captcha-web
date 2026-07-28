@@ -73,30 +73,24 @@
         };
 
         const keys = Object.keys(categories);
-        // 随机选一个作为目标，例如“红绿灯”
         const targetCategory = keys[Math.floor(Math.random() * keys.length)];
         const targetIcons = categories[targetCategory];
         
         document.getElementById('target-name').innerText = targetCategory;
 
-        // 生成 9 个格子的内容
         let gridItems = [];
-        // 1. 确保至少有 2 到 4 个正确答案
         const targetCount = Math.floor(Math.random() * 3) + 2; 
         for(let i=0; i<targetCount; i++) {
             gridItems.push({ icon: targetIcons[Math.floor(Math.random() * targetIcons.length)], isTarget: true });
         }
 
-        // 2. 剩下的格子填入干扰项（其他分类的图标）
         const distractors = keys.filter(k => k !== targetCategory).flatMap(k => categories[k]);
         while(gridItems.length < 9) {
             gridItems.push({ icon: distractors[Math.floor(Math.random() * distractors.length)], isTarget: false });
         }
 
-        // 3. 打乱九宫格顺序
         gridItems.sort(() => Math.random() - 0.5);
 
-        // 渲染九宫格
         const grid = document.getElementById('grid');
         let selectedIndexes = new Set();
 
@@ -116,21 +110,18 @@
             grid.appendChild(div);
         });
 
-        // 点击验证按钮的逻辑
+        // 核心修复：加入防卡死的验证逻辑
         function verifyCaptcha() {
             let isCorrect = true;
             let targetIndexes = [];
             
-            // 找出所有正确答案的索引
             gridItems.forEach((item, index) => {
                 if (item.isTarget) targetIndexes.push(index);
             });
 
-            // 检查数量是否匹配
             if (selectedIndexes.size !== targetIndexes.length) {
                 isCorrect = false;
             } else {
-                // 检查选中的是不是全是正确的
                 for (let index of selectedIndexes) {
                     if (!gridItems[index].isTarget) {
                         isCorrect = false;
@@ -140,11 +131,16 @@
             }
 
             if (isCorrect) {
-                tg.sendData("success");
-                tg.close();
+                try {
+                    // 如果是从内联按钮进来的，这里会报错并跳入 catch
+                    tg.sendData("success");
+                    tg.close();
+                } catch(error) {
+                    // 弹窗提示，避免“没有任何反应”
+                    tg.showAlert("⚠️ 提交失败！\n原因：您点击了过期的验证按钮。\n\n请关闭此窗口，点击屏幕【最下方】打字框上面的大按钮重新进入验证！");
+                }
             } else {
-                tg.showAlert("验证失败，请重新选择！");
-                // 清空选中状态
+                tg.showAlert("❌ 验证失败，请重新检查是否选全了！");
                 selectedIndexes.clear();
                 document.querySelectorAll('.item').forEach(el => el.classList.remove('selected'));
             }
